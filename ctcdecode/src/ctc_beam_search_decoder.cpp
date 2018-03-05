@@ -30,18 +30,6 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
                    "The shape of probs_seq does not match with "
                    "the shape of the vocabulary");
   }
-
-  // assign blank id
-  // size_t blank_id = vocabulary.size();
-
-  // assign space id
-  auto it = std::find(vocabulary.begin(), vocabulary.end(), " ");
-  int space_id = it - vocabulary.begin();
-  // if no space in vocabulary
-  if ((size_t)space_id >= vocabulary.size()) {
-    space_id = -2;
-  }
-
   // init prefixes' root
   PathTrie root;
   root.score = root.log_prob_b_prev = 0.0;
@@ -80,6 +68,9 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
 
       for (size_t i = 0; i < prefixes.size() && i < beam_size; ++i) {
         auto prefix = prefixes[i];
+        std::cout<<"[ctc_beam_search_decoder] character: "<<vocabulary[c]<<" timestep: "<<time_step;
+        std::cout<<" log_prob_c: "<<log_prob_c<<" ";
+        prefix->print_prefix_path(vocabulary);
         if (full_beam && log_prob_c + prefix->score < min_cutoff) {
           break;
         }
@@ -87,12 +78,14 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
         if (c == blank_id) {
           prefix->log_prob_b_cur =
               log_sum_exp(prefix->log_prob_b_cur, log_prob_c + prefix->score);
+          std::cout<<" log_prob_b_cur: "<<prefix->log_prob_b_cur<<std::endl;
           continue;
         }
         // repeated character
         if (c == prefix->character) {
           prefix->log_prob_nb_cur = log_sum_exp(
               prefix->log_prob_nb_cur, log_prob_c + prefix->log_prob_nb_prev);
+          std::cout<<" (repeated)log_prob_nb_cur: "<<prefix->log_prob_nb_cur;
         }
         // get new prefix
         auto prefix_new = prefix->get_path_trie(c, time_step);
@@ -106,24 +99,43 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
           } else if (c != prefix->character) {
             log_p = log_prob_c + prefix->score;
           }
-
+          std::cout<<" current_log_p: "<<log_p<<std::endl;
           // language model scoring
           if (ext_scorer != nullptr &&
-              (c == space_id || ext_scorer->is_character_based())) {
+              (ext_scorer->stop_symbol_map_.find(c) != ext_scorer->stop_symbol_map_.end() ||
+               ext_scorer->is_character_based())) {
             PathTrie *prefix_to_score = nullptr;
-            // skip scoring the space
-            if (ext_scorer->is_character_based()) {
-              prefix_to_score = prefix_new;
-            } else {
-              prefix_to_score = prefix;
-            }
+            /*
+              Note to self:
+              For UXXXX we tokenize on digits and punctuations. So for a given string
+              u0061_u0062 u0020 u0033 u0031 (original text: ab 31)
+              at prefix root<-u0061<-u0062<-u0020
+              we compute prefix_score with LM upto u0020 not including u0020
+              This is to make sure that the words are scored in isolation atleast once.
 
+              fyi: the logic doesn't handle decoding the prefix ending in a digit or punctuation with LM
+              
+             */
+            if (ext_scorer->is_character_based())
+              prefix_to_score = prefix_new;
+            else
+              prefix_to_score = prefix; 
+            
             float score = 0.0;
             std::vector<std::string> ngram;
             ngram = ext_scorer->make_ngram(prefix_to_score);
             score = ext_scorer->get_log_cond_prob(ngram) * ext_scorer->alpha;
+            std::cout<<"\n[ctc_beam_search_decoder] LM scoring..."<<std::endl;
+            std::cout<<"[ctc_beam_search_decoder] current prefix path : ";
+            prefix_new->print_prefix_path(vocabulary);
+            std::cout<<"[ctc_beam_search_decoder] prefix path 2 score : ";
+            prefix_to_score->print_prefix_path(vocabulary);
+            std::cout<<"[ctc_beam_search_decoder] log_cond_prob of ngram: "<<ext_scorer->get_log_cond_prob(ngram)<<std::endl;
+            std::cout<<"[ctc_beam_search_decoder] get_log_con_prob(ngram) * alpha : "<<score<<std::endl;
             log_p += score;
+            std::cout<<"[ctc_beam_search_decoder] + score : "<<log_p<<std::endl;
             log_p += ext_scorer->beta;
+            std::cout<<"[ctc_beam_search_decoder] + beta : "<<log_p<<std::endl<<std::endl;
           }
           prefix_new->log_prob_nb_cur =
               log_sum_exp(prefix_new->log_prob_nb_cur, log_p);
@@ -148,11 +160,12 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
     }
   }  // end of loop over time
 
-  // score the last word of each prefix that doesn't end with space
+  // score the last word of each prefix that doesn't end with stop symbol
   if (ext_scorer != nullptr && !ext_scorer->is_character_based()) {
     for (size_t i = 0; i < beam_size && i < prefixes.size(); ++i) {
       auto prefix = prefixes[i];
-      if (!prefix->is_empty() && prefix->character != space_id) {
+      if (!prefix->is_empty() &&
+          ext_scorer->stop_symbol_map_.find(prefix->character) == ext_scorer->stop_symbol_map_.end()) {
         float score = 0.0;
         std::vector<std::string> ngram = ext_scorer->make_ngram(prefix);
         score = ext_scorer->get_log_cond_prob(ngram) * ext_scorer->alpha;

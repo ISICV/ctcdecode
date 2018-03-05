@@ -1,11 +1,14 @@
 #ifndef PATH_TRIE_H
 #define PATH_TRIE_H
 
+#include <string>
 #include <algorithm>
 #include <limits>
+#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "fst/fstlib.h"
 
@@ -26,11 +29,14 @@ public:
   // get the prefix in index from some stop node to current nodel
   PathTrie* get_path_vec(std::vector<int>& output,
                          std::vector<int>& timesteps,
-                         int stop,
+                         std::unordered_map<int, std::string>& stop_symbol_map,
                          size_t max_steps = std::numeric_limits<size_t>::max());
 
   // update log probs
   void iterate_to_vec(std::vector<PathTrie*>& output);
+
+  // debugging help
+  void print_prefix_path(std::vector<std::string> char_list);
 
   // set dictionary for FST
   void set_dictionary(fst::StdVectorFst* dictionary);

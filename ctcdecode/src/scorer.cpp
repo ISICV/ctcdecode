@@ -2,6 +2,8 @@
 
 #include <unistd.h>
 #include <iostream>
+#include <vector>
+#include <unordered_map>
 
 #include "lm/config.hh"
 #include "lm/model.hh"
@@ -26,8 +28,7 @@ Scorer::Scorer(double alpha,
 
   max_order_ = 0;
   dict_size_ = 0;
-  SPACE_ID_ = -1;
-
+  
   setup(lm_path, vocab_list);
 }
 
@@ -46,9 +47,11 @@ void Scorer::setup(const std::string& lm_path,
   load_lm(lm_path);
   // set char map for scorer
   set_char_map(vocab_list);
+  // set tokenization symbol set based on char_map
+  set_stop_symbol_map();
   // fill the dictionary for FST
   if (!is_character_based()) {
-    fill_dictionary(true);
+    fill_dictionary();
   }
 }
 
@@ -65,8 +68,9 @@ void Scorer::load_lm(const std::string& lm_path) {
   for (size_t i = 0; i < vocabulary_.size(); ++i) {
     if (is_character_based_ && vocabulary_[i] != UNK_TOKEN &&
         vocabulary_[i] != START_TOKEN && vocabulary_[i] != END_TOKEN &&
-        get_utf8_str_len(enumerate.vocabulary[i]) > 1) {
+        enumerate.vocabulary[i].length() > 5) { // assuming a single char is of form UXXXX
       is_character_based_ = false;
+      break;
     }
   }
 }
@@ -81,14 +85,22 @@ double Scorer::get_log_cond_prob(const std::vector<std::string>& words) {
     lm::WordIndex word_index = model->BaseVocabulary().Index(words[i]);
     // encounter OOV
     if (word_index == 0) {
+      std::cout<<"[get_log_cond_prob] oov["<<words[i]<<"] score: "<<OOV_SCORE<<std::endl;
       return OOV_SCORE;
+    }
+    else{
+      std::cout<<"[get_log_cond_prob] score["<<words[i]<<"] : "<<model->BaseScore(&state, word_index, &out_state)<<std::endl;
     }
     cond_prob = model->BaseScore(&state, word_index, &out_state);
     tmp_state = state;
     state = out_state;
     out_state = tmp_state;
   }
-  // return  loge prob
+  // return loge prob
+  std::cout<<"[get_log_cond_prob] words:[";
+  for(auto word : words)
+    std::cout<<" "<<word;
+  std::cout<<" ] = "<<cond_prob/NUM_FLT_LOGE<<std::endl;
   return cond_prob/NUM_FLT_LOGE;
 }
 
@@ -125,62 +137,118 @@ void Scorer::reset_params(float alpha, float beta) {
 }
 
 std::string Scorer::vec2str(const std::vector<int>& input) {
+  // todo: might need to write logic to input space before and after a stop_symbol token eg: " u0020 "
   std::string word;
-  for (auto ind : input) {
-    word += char_list_[ind];
+  //---- testing purpose only!!
+  if(input.size() && input[0] == -1)
+    return "_ROOT";
+  //-----
+  for (int i = 0; i < input.size(); i++) {
+    if(i != 0)
+      word += "_";
+    word += char_list_[input[i]];
   }
   return word;
 }
 
 std::vector<std::string> Scorer::split_labels(const std::vector<int>& labels) {
   if (labels.empty()) return {};
-
-  std::string s = vec2str(labels);
-  std::vector<std::string> words;
+  
   if (is_character_based_) {
-    words = split_utf8_str(s);
-  } else {
-    words = split_str(s, " ");
+    std::cout<<"splitting char model not defined."<<std::endl;
+    std::exit(1);
   }
+  
+  std::vector<std::string> words;
+  std::string current_string;
+  bool start_of_new_word = true;
+  for(auto label: labels){
+    if(stop_symbol_map_.find(label) != stop_symbol_map_.end()){
+      if(current_string.length() > 0) {
+        words.push_back(current_string);
+      }
+      words.push_back(char_list_[label]);
+      start_of_new_word = true;
+      current_string = "";
+    }
+    else{
+      if(!start_of_new_word) {
+        current_string += '_';
+      }
+      current_string += char_list_[label];
+      start_of_new_word = false;
+    }
+  }
+  if(current_string.length() > 0) {
+    words.push_back(current_string);
+  }
+  // std::cout<<"[split_lables] words:";
+  //   for(auto word : words)
+  //     std::cout<<" "<<word;
+  //   std::cout<<std::endl;
   return words;
 }
 
 void Scorer::set_char_map(const std::vector<std::string>& char_list) {
   char_list_ = char_list;
   char_map_.clear();
-
   for (size_t i = 0; i < char_list_.size(); i++) {
-    if (char_list_[i] == " ") {
-      SPACE_ID_ = i;
-      char_map_[' '] = i;
-    } else if (char_list_[i].size() == 1) {
-      char_map_[char_list_[i][0]] = i;
+      char_map_[char_list_[i]] = i;
+  }
+  std::cout<<std::endl<<std::endl;
+}
+
+void Scorer::set_stop_symbol_map(){
+  for(auto const& character: char_map_){
+    std::string uxxxx_char = character.first;
+    int pos = character.second;
+    if ( UXXXX_PUNCTUATIONS.find(uxxxx_char) != UXXXX_PUNCTUATIONS.end() ||
+         UXXXX_DIGITS.find(uxxxx_char) != UXXXX_DIGITS.end() ){
+      stop_symbol_map_[pos] = uxxxx_char;
     }
   }
+  std::cout<<std::endl<<std::endl;
 }
 
 std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
   std::vector<std::string> ngram;
   PathTrie* current_node = prefix;
   PathTrie* new_node = nullptr;
-
+  // std::cout<<"[make_ngram] start"<<std::endl;
   for (int order = 0; order < max_order_; order++) {
     std::vector<int> prefix_vec;
     std::vector<int> prefix_steps;
 
     if (is_character_based_) {
-      new_node = current_node->get_path_vec(prefix_vec, prefix_steps, SPACE_ID_, 1);
+      std::cout<<"undefined behaviour when using stop_symbol_map_ with character model."<<std::endl;
+      std::exit(1);
+      new_node = current_node->get_path_vec(prefix_vec, prefix_steps, stop_symbol_map_, 1);
       current_node = new_node;
     } else {
-      new_node = current_node->get_path_vec(prefix_vec, prefix_steps, SPACE_ID_);
-      current_node = new_node->parent;  // Skipping spaces
+      std::cout<<"[make_ngram] current_node->character:"<<current_node->character<<std::endl;
+      std::vector<int> vec_char {current_node->character};
+      std::cout<<"[make_ngram] vec2str(current_node->character):"<<vec2str(vec_char)<<std::endl;
+      if(stop_symbol_map_.find(current_node->character) != stop_symbol_map_.end()){
+        // logic to push back stop_symbols into the ngram as seperate tokens
+        prefix_vec.push_back(current_node->character);
+        prefix_steps.push_back(current_node->timestep);
+        new_node = current_node->parent;
+      }
+      else{
+        // read till stop symbol.
+        new_node = current_node->get_path_vec(prefix_vec, prefix_steps, stop_symbol_map_);
+      }
+      current_node = new_node;
     }
 
     // reconstruct word
     std::string word = vec2str(prefix_vec);
-    ngram.push_back(word);
+    std::cout<<"[make_ngram] word found :"<<word<<std::endl;
+    if (word.length() > 0)
+      ngram.push_back(word);
 
-    if (new_node->character == -1) {
+    if (new_node == nullptr || new_node->character == -1) {
+      // if new_node is at ROOT_
       // No more spaces, but still need order
       for (int i = 0; i < max_order_ - order - 1; i++) {
         ngram.push_back(START_TOKEN);
@@ -189,22 +257,21 @@ std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
     }
   }
   std::reverse(ngram.begin(), ngram.end());
+  std::cout<<"[make_ngram] list:";
+  for(auto gram: ngram)
+    std::cout<<" "<<gram;
+  std::cout<<std::endl;
+  // std::cout<<"[make_ngram] stop"<<std::endl<<std::endl;
   return ngram;
 }
 
-void Scorer::fill_dictionary(bool add_space) {
+void Scorer::fill_dictionary() {
   fst::StdVectorFst dictionary;
-  // First reverse char_list so ints can be accessed by chars
-  std::unordered_map<std::string, int> char_map;
-  for (size_t i = 0; i < char_list_.size(); i++) {
-    char_map[char_list_[i]] = i;
-  }
 
   // For each unigram convert to ints and put in trie
   int dict_size = 0;
   for (const auto& word : vocabulary_) {
-    bool added = add_word_to_dictionary(
-        word, char_map, add_space, SPACE_ID_, &dictionary);
+    bool added = add_word_to_dictionary(word, char_map_, &dictionary);
     dict_size += added ? 1 : 0;
   }
 

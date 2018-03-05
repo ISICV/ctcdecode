@@ -58,39 +58,12 @@ std::vector<std::pair<double, Output>> get_beam_search_result(
     Output outputs;
     outputs.tokens = output;
     outputs.timesteps = timesteps;
-    std::pair<double, Output> output_pair(-space_prefixes[i]->approx_ctc,
+    std::pair<double, Output> output_pair(-space_prefixes[i]->score,
                                                outputs);
     output_vecs.emplace_back(output_pair);
   }
 
   return output_vecs;
-}
-
-size_t get_utf8_str_len(const std::string &str) {
-  size_t str_len = 0;
-  for (char c : str) {
-    str_len += ((c & 0xc0) != 0x80);
-  }
-  return str_len;
-}
-
-std::vector<std::string> split_utf8_str(const std::string &str) {
-  std::vector<std::string> result;
-  std::string out_str;
-
-  for (char c : str) {
-    if ((c & 0xc0) != 0x80)  // new UTF-8 character
-    {
-      if (!out_str.empty()) {
-        result.push_back(out_str);
-        out_str.clear();
-      }
-    }
-
-    out_str.append(1, c);
-  }
-  result.push_back(out_str);
-  return result;
 }
 
 std::vector<std::string> split_str(const std::string &s,
@@ -145,30 +118,18 @@ void add_word_to_fst(const std::vector<int> &word,
 bool add_word_to_dictionary(
     const std::string &word,
     const std::unordered_map<std::string, int> &char_map,
-    bool add_space,
-    int SPACE_ID,
     fst::StdVectorFst *dictionary) {
-  auto characters = split_utf8_str(word);
-
+  auto characters = split_str(word, "_");
   std::vector<int> int_word;
-
   for (auto &c : characters) {
-    if (c == " ") {
-      int_word.push_back(SPACE_ID);
+    auto int_c = char_map.find(c);
+    if (int_c != char_map.end()) {
+      int_word.push_back(int_c->second);
     } else {
-      auto int_c = char_map.find(c);
-      if (int_c != char_map.end()) {
-        int_word.push_back(int_c->second);
-      } else {
-        return false;  // return without adding
-      }
+      // std::cout<<"[add_word_to_dictionary] failed."<<std::endl;
+      return false;  // return without adding
     }
   }
-
-  if (add_space) {
-    int_word.push_back(SPACE_ID);
-  }
-
   add_word_to_fst(int_word, dictionary);
   return true;  // return with successful adding
 }

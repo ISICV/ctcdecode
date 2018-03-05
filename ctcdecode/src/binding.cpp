@@ -5,21 +5,13 @@
 #include "TH.h"
 #include "scorer.h"
 #include "ctc_beam_search_decoder.h"
-#include "utf8.h"
+#include "decoder_utils.h"
 
-int utf8_to_utf8_char_vec(const char* labels, std::vector<std::string>& new_vocab) {
-    const char* str_i = labels;
-    const char* end = str_i + strlen(labels)+1;
-    do {
-        char u[5] = {0,0,0,0,0};
-        uint32_t code = utf8::next(str_i, end);
-        if (code == 0) {
-            continue;
-        }
-        utf8::append(code, u);
-        new_vocab.push_back(std::string(u));
-    }
-    while (str_i < end);
+int uxxxx_string_to_uxxxx_char_vec(const char* labels, std::vector<std::string>& new_vocab) {
+  // Todo: don't assume the values are comma seperated.
+  const std::string labels_str(labels);
+  std::string delimiter = ",";
+  new_vocab = split_str(labels_str, delimiter);
 }
 
 int beam_decode(THFloatTensor *th_probs,
@@ -38,7 +30,7 @@ int beam_decode(THFloatTensor *th_probs,
                 THIntTensor *th_out_length)
 {
     std::vector<std::string> new_vocab;
-    utf8_to_utf8_char_vec(labels, new_vocab);
+    uxxxx_string_to_uxxxx_char_vec(labels, new_vocab);
     Scorer *ext_scorer = NULL;
     if (scorer != NULL) {
         ext_scorer = static_cast<Scorer *>(scorer);
@@ -130,7 +122,7 @@ extern "C"
                             const char* labels,
                             int vocab_size) {
         std::vector<std::string> new_vocab;
-        utf8_to_utf8_char_vec(labels, new_vocab);
+        uxxxx_string_to_uxxxx_char_vec(labels, new_vocab);
         Scorer* scorer = new Scorer(alpha, beta, lm_path, new_vocab);
         return static_cast<void*>(scorer);
     }

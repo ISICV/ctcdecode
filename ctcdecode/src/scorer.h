@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <set>
 #include <vector>
 
 #include "lm/enumerate_vocab.hh"
@@ -17,6 +18,13 @@ const double OOV_SCORE = -1000.0;
 const std::string START_TOKEN = "<s>";
 const std::string UNK_TOKEN = "<unk>";
 const std::string END_TOKEN = "</s>";
+
+// Todo: Remove hardcoded values and use unicode categories
+const std::set<std::string> UXXXX_PUNCTUATIONS = {"u0020", "u002e", "u002c", "u003b", "u0027", "u0022", "u002f", "u0021", "u0028",
+                                                  "u0029", "u005b", "u005d","u003f", "u003c", "u003e", "u002d", "u005f", "u007b",
+                                                  "u007d", "u0024", "u0025", "u0023", "u0026", "u002a"};
+const std::set<std::string> UXXXX_DIGITS = {"u0030", "u0031", "u0032", "u0033", "u0034", "u0035", "u0036", "u0037",
+                                            "u0038", "u0039"};
 
 // Implement a callback to retrive the dictionary of language model.
 class RetriveStrEnumerateVocab : public lm::EnumerateVocab {
@@ -73,7 +81,10 @@ public:
   double alpha;
   // word insertion weight
   double beta;
-
+  // char list
+  std::vector<std::string> char_list_;
+  // stop symbols defined for tokenization logic
+  std::unordered_map<int, std::string> stop_symbol_map_;
   // pointer to the dictionary of FST
   void *dictionary;
 
@@ -86,11 +97,15 @@ protected:
   void load_lm(const std::string &lm_path);
 
   // fill dictionary for FST
-  void fill_dictionary(bool add_space);
+  void fill_dictionary();
 
   // set char map
   void set_char_map(const std::vector<std::string> &char_list);
 
+  // set tokenization symbols map
+  // maps int positions of punctuation/digits to act as tokenizing points.
+  void set_stop_symbol_map();
+  
   double get_log_prob(const std::vector<std::string> &words);
 
   // translate the vector in index to string
@@ -102,10 +117,8 @@ private:
   size_t max_order_;
   size_t dict_size_;
 
-  int SPACE_ID_;
-  std::vector<std::string> char_list_;
-  std::unordered_map<char, int> char_map_;
 
+  std::unordered_map<std::string, int> char_map_;
   std::vector<std::string> vocabulary_;
 };
 

@@ -1,12 +1,16 @@
 #include "path_trie.h"
 
+#include <string>
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "decoder_utils.h"
+#include "scorer.h"
 
 PathTrie::PathTrie() {
   log_prob_b_prev = -NUM_FLT_INF;
@@ -87,21 +91,25 @@ PathTrie* PathTrie::get_path_trie(int new_char, int new_timestep, bool reset) {
 }
 
 PathTrie* PathTrie::get_path_vec(std::vector<int>& output, std::vector<int>& timesteps) {
-  return get_path_vec(output, timesteps, ROOT_);
+  // a fake map to interface with get_path_vec function.
+  std::unordered_map<int, std::string> _root_stop = {{}};
+  return get_path_vec(output, timesteps, _root_stop);
 }
 
 PathTrie* PathTrie::get_path_vec(std::vector<int>& output,
                                  std::vector<int>& timesteps,
-                                 int stop,
+                                 std::unordered_map<int, std::string>& stop_symbol_map,
                                  size_t max_steps) {
-  if (character == stop || character == ROOT_ || output.size() == max_steps) {
+  // std::cout<<"[get_path_vec] current char: "<<character<<std::endl;
+  if (stop_symbol_map.find(character) != stop_symbol_map.end() || character == ROOT_ || output.size() == max_steps) {
+    // std::cout<<"[get_path_vec] found stop_symbol or character is ROOT_ or max_steps reached."<<std::endl;
     std::reverse(output.begin(), output.end());
     std::reverse(timesteps.begin(), timesteps.end());
     return this;
   } else {
     output.push_back(character);
     timesteps.push_back(timestep);
-    return parent->get_path_vec(output, timesteps, stop, max_steps);
+    return parent->get_path_vec(output, timesteps, stop_symbol_map, max_steps);
   }
 }
 
@@ -147,6 +155,18 @@ void PathTrie::set_dictionary(fst::StdVectorFst* dictionary) {
   dictionary_state_ = dictionary->Start();
   has_dictionary_ = true;
 }
+
+void PathTrie::print_prefix_path(std::vector<std::string> char_list){
+  std::vector<int> output;
+  std::vector<int> timesteps;
+  this->get_path_vec(output, timesteps);
+  std::cout<<"Prefix: _ROOT";
+  for(auto character: output){
+    std::cout<<"<-"<<char_list[character];
+  }
+  std::cout<<std::endl;
+}
+  
 
 using FSTMATCH = fst::SortedMatcher<fst::StdVectorFst>;
 void PathTrie::set_matcher(std::shared_ptr<FSTMATCH> matcher) {
