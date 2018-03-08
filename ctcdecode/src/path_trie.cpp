@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <map>
 #include <unordered_map>
 
 #include "decoder_utils.h"
@@ -92,24 +93,24 @@ PathTrie* PathTrie::get_path_trie(int new_char, int new_timestep, bool reset) {
 
 PathTrie* PathTrie::get_path_vec(std::vector<int>& output, std::vector<int>& timesteps) {
   // a fake map to interface with get_path_vec function.
-  std::unordered_map<int, std::string> _root_stop = {{}};
+  std::unordered_map<int, std::string> _root_stop;
   return get_path_vec(output, timesteps, _root_stop);
 }
 
 PathTrie* PathTrie::get_path_vec(std::vector<int>& output,
                                  std::vector<int>& timesteps,
-                                 std::unordered_map<int, std::string>& stop_symbol_map,
+                                 std::unordered_map<int, std::string>& tokenization_symbol_map,
                                  size_t max_steps) {
-  // std::cout<<"[get_path_vec] current char: "<<character<<std::endl;
-  if (stop_symbol_map.find(character) != stop_symbol_map.end() || character == ROOT_ || output.size() == max_steps) {
-    // std::cout<<"[get_path_vec] found stop_symbol or character is ROOT_ or max_steps reached."<<std::endl;
+  if ((!tokenization_symbol_map.empty() && tokenization_symbol_map.find(character) != tokenization_symbol_map.end()) ||
+      character == ROOT_ ||
+      output.size() == max_steps) {
     std::reverse(output.begin(), output.end());
     std::reverse(timesteps.begin(), timesteps.end());
     return this;
   } else {
     output.push_back(character);
     timesteps.push_back(timestep);
-    return parent->get_path_vec(output, timesteps, stop_symbol_map, max_steps);
+    return parent->get_path_vec(output, timesteps, tokenization_symbol_map, max_steps);
   }
 }
 
@@ -156,15 +157,101 @@ void PathTrie::set_dictionary(fst::StdVectorFst* dictionary) {
   has_dictionary_ = true;
 }
 
-void PathTrie::print_prefix_path(std::vector<std::string> char_list){
+std::string PathTrie::print_prefix_path(std::vector<std::string> char_list){
   std::vector<int> output;
   std::vector<int> timesteps;
-  this->get_path_vec(output, timesteps);
-  std::cout<<"Prefix: _ROOT";
+  std::map<std::string, std::string> utf_2_eng;
+  utf_2_eng["u0020"] = "<spc>";
+  utf_2_eng["u0021"] = "!";
+  utf_2_eng["u0022"] = "\"";
+  utf_2_eng["u0027"] = "'";
+  utf_2_eng["u0028"] = "(";
+  utf_2_eng["u0029"] = ")";
+  utf_2_eng["u002a"] = "*";
+  utf_2_eng["u002c"] = ",";
+  utf_2_eng["u002d"] = "-";
+  utf_2_eng["u002e"] = ".";
+  utf_2_eng["u0030"] = "0";
+  utf_2_eng["u0031"] = "1";
+  utf_2_eng["u0032"] = "2";
+  utf_2_eng["u0033"] = "3";
+  utf_2_eng["u0034"] = "4";
+  utf_2_eng["u0035"] = "5";
+  utf_2_eng["u0036"] = "6";
+  utf_2_eng["u0037"] = "7";
+  utf_2_eng["u0038"] = "8";
+  utf_2_eng["u0039"] = "9";
+  utf_2_eng["u003a"] = ":";
+  utf_2_eng["u003b"] = ";";
+  utf_2_eng["u003f"] = "?";
+  utf_2_eng["u0041"] = "A";
+  utf_2_eng["u0042"] = "B";
+  utf_2_eng["u0043"] = "C";
+  utf_2_eng["u0044"] = "D";
+  utf_2_eng["u0045"] = "E";
+  utf_2_eng["u0046"] = "F";
+  utf_2_eng["u0047"] = "G";
+  utf_2_eng["u0048"] = "H";
+  utf_2_eng["u0049"] = "I";
+  utf_2_eng["u004a"] = "J";
+  utf_2_eng["u004b"] = "K";
+  utf_2_eng["u004c"] = "L";
+  utf_2_eng["u004d"] = "M";
+  utf_2_eng["u004e"] = "N";
+  utf_2_eng["u004f"] = "O";
+  utf_2_eng["u0050"] = "P";
+  utf_2_eng["u0051"] = "Q";
+  utf_2_eng["u0052"] = "R";
+  utf_2_eng["u0053"] = "S";
+  utf_2_eng["u0054"] = "T";
+  utf_2_eng["u0055"] = "U";
+  utf_2_eng["u0056"] = "V";
+  utf_2_eng["u0057"] = "W";
+  utf_2_eng["u0058"] = "X";
+  utf_2_eng["u0059"] = "Y";
+  utf_2_eng["u005a"] = "Z";
+  utf_2_eng["u005c"] = "\\";
+  utf_2_eng["u0061"] = "a";
+  utf_2_eng["u0062"] = "b";
+  utf_2_eng["u0063"] = "c";
+  utf_2_eng["u0064"] = "d";
+  utf_2_eng["u0065"] = "e";
+  utf_2_eng["u0066"] = "f";
+  utf_2_eng["u0067"] = "g";
+  utf_2_eng["u0068"] = "h";
+  utf_2_eng["u0069"] = "i";
+  utf_2_eng["u006a"] = "j";
+  utf_2_eng["u006b"] = "k";
+  utf_2_eng["u006c"] = "l";
+  utf_2_eng["u006d"] = "m";
+  utf_2_eng["u006e"] = "n";
+  utf_2_eng["u006f"] = "o";
+  utf_2_eng["u0070"] = "p";
+  utf_2_eng["u0071"] = "q";
+  utf_2_eng["u0072"] = "r";
+  utf_2_eng["u0073"] = "s";
+  utf_2_eng["u0074"] = "t";
+  utf_2_eng["u0075"] = "u";
+  utf_2_eng["u0076"] = "v";
+  utf_2_eng["u0077"] = "w";
+  utf_2_eng["u0078"] = "x";
+  utf_2_eng["u0079"] = "y";
+  utf_2_eng["u007a"] = "z";
+  utf_2_eng["u007e"] = "~";
+  utf_2_eng["u2013"] = "–";
+  utf_2_eng["u201c"] = "“";
+  get_path_vec(output, timesteps);
+  std::string print_path = "";
   for(auto character: output){
-    std::cout<<"<-"<<char_list[character];
+    if(utf_2_eng.find(char_list[character]) != utf_2_eng.end()){
+      print_path += utf_2_eng[char_list[character]];
+    }
+    else{
+      std::cout<<"character not in map"<<std::endl;
+      std::exit(1);
+    }
   }
-  std::cout<<std::endl;
+  return print_path;
 }
   
 

@@ -68,9 +68,11 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
 
       for (size_t i = 0; i < prefixes.size() && i < beam_size; ++i) {
         auto prefix = prefixes[i];
-        std::cout<<"[ctc_beam_search_decoder] character: "<<vocabulary[c]<<" timestep: "<<time_step;
-        std::cout<<" log_prob_c: "<<log_prob_c<<" ";
-        prefix->print_prefix_path(vocabulary);
+
+        // std::cout<<"\n[ctc_beam_search_decoder] char:"<<vocabulary[c]<<" timestep:"<<time_step;
+        // std::cout<<" log_prob_c:"<<log_prob_c<<std::endl;
+        // std::cout<<"[ctc_beam_search_decoder] prefix: "<<prefix->print_prefix_path(vocabulary)<<std::endl;
+
         if (full_beam && log_prob_c + prefix->score < min_cutoff) {
           break;
         }
@@ -78,68 +80,85 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
         if (c == blank_id) {
           prefix->log_prob_b_cur =
               log_sum_exp(prefix->log_prob_b_cur, log_prob_c + prefix->score);
-          std::cout<<" log_prob_b_cur: "<<prefix->log_prob_b_cur<<std::endl;
           continue;
         }
         // repeated character
         if (c == prefix->character) {
           prefix->log_prob_nb_cur = log_sum_exp(
               prefix->log_prob_nb_cur, log_prob_c + prefix->log_prob_nb_prev);
-          std::cout<<" (repeated)log_prob_nb_cur: "<<prefix->log_prob_nb_cur;
         }
         // get new prefix
         auto prefix_new = prefix->get_path_trie(c, time_step);
-
+        
         if (prefix_new != nullptr) {
           float log_p = -NUM_FLT_INF;
-
+          
+          // std::cout<<"[ctc_beam_search_decoder] prefix_new: "<<prefix_new->print_prefix_path(vocabulary)<<std::endl;
+          
           if (c == prefix->character &&
               prefix->log_prob_b_prev > -NUM_FLT_INF) {
             log_p = log_prob_c + prefix->log_prob_b_prev;
           } else if (c != prefix->character) {
             log_p = log_prob_c + prefix->score;
           }
-          std::cout<<" current_log_p: "<<log_p<<std::endl;
           // language model scoring
           if (ext_scorer != nullptr &&
-              (ext_scorer->stop_symbol_map_.find(c) != ext_scorer->stop_symbol_map_.end() ||
+              (ext_scorer->tokenization_char_map_.find(c) != ext_scorer->tokenization_char_map_.end() ||
                ext_scorer->is_character_based())) {
-            PathTrie *prefix_to_score = nullptr;
-            /*
-              Note to self:
-              For UXXXX we tokenize on digits and punctuations. So for a given string
-              u0061_u0062 u0020 u0033 u0031 (original text: ab 31)
-              at prefix root<-u0061<-u0062<-u0020
-              we compute prefix_score with LM upto u0020 not including u0020
-              This is to make sure that the words are scored in isolation atleast once.
-
-              fyi: the logic doesn't handle decoding the prefix ending in a digit or punctuation with LM
-              
-             */
-            if (ext_scorer->is_character_based())
-              prefix_to_score = prefix_new;
-            else
-              prefix_to_score = prefix; 
             
-            float score = 0.0;
-            std::vector<std::string> ngram;
-            ngram = ext_scorer->make_ngram(prefix_to_score);
-            score = ext_scorer->get_log_cond_prob(ngram) * ext_scorer->alpha;
-            std::cout<<"\n[ctc_beam_search_decoder] LM scoring..."<<std::endl;
-            std::cout<<"[ctc_beam_search_decoder] current prefix path : ";
-            prefix_new->print_prefix_path(vocabulary);
-            std::cout<<"[ctc_beam_search_decoder] prefix path 2 score : ";
-            prefix_to_score->print_prefix_path(vocabulary);
-            std::cout<<"[ctc_beam_search_decoder] log_cond_prob of ngram: "<<ext_scorer->get_log_cond_prob(ngram)<<std::endl;
-            std::cout<<"[ctc_beam_search_decoder] get_log_con_prob(ngram) * alpha : "<<score<<std::endl;
-            log_p += score;
-            std::cout<<"[ctc_beam_search_decoder] + score : "<<log_p<<std::endl;
-            log_p += ext_scorer->beta;
-            std::cout<<"[ctc_beam_search_decoder] + beta : "<<log_p<<std::endl<<std::endl;
-          }
+            if (ext_scorer->is_character_based()){
+              PathTrie *prefix_to_score = nullptr;
+              prefix_to_score = prefix_new;
+              float score = 0.0;
+              std::vector<std::string> ngram;
+              ngram = ext_scorer->make_ngram(prefix_to_score);
+              score = ext_scorer->get_log_cond_prob(ngram) * ext_scorer->alpha;
+              log_p += score;
+              log_p += ext_scorer->beta;
+            }
+            
+            else{
+              /*
+              Algorithm:
+              If current is tokenization symbol:
+                 1 prefix_new_score = ngram_score(prefix_new)
+                 2 if prefix->character is not tokenization character
+                         prefix_score = ngram_score(prefix)
+                     else
+                         prefix_score <- 0.0
+                 3 score = prefix_new_score + prefix_score (log scale sum)
+              */
+              float score;
+              float prefix_new_log_cond_prob;
+              std::vector<std::string> prefix_new_ngram;
+              std::cout<<"\nprefix_new: "<<prefix_new->print_prefix_path(vocabulary)<<std::endl;
+              prefix_new_ngram = ext_scorer->make_ngram(prefix_new);
+              prefix_new_log_cond_prob = ext_scorer->get_log_cond_prob(prefix_new_ngram);
+
+              if(ext_scorer->tokenization_char_map_.find(prefix->character) == ext_scorer->tokenization_char_map_.end()){
+                float prefix_log_cond_prob;
+                std::vector<std::string> prefix_ngram;
+                std::cout<<"prefix: "<<prefix->print_prefix_path(vocabulary)<<std::endl;
+                prefix_ngram = ext_scorer->make_ngram(prefix);
+                prefix_log_cond_prob = ext_scorer->get_log_cond_prob(prefix_ngram);
+                std::cout<<"prefix_new  cond_prob:"<<prefix_new_log_cond_prob<<std::endl;
+                std::cout<<"prefix cond_prob:"<<prefix_log_cond_prob<<std::endl;
+                prefix_new_log_cond_prob = log_sum_exp(prefix_new_log_cond_prob, prefix_log_cond_prob);
+              }
+              std::cout<<"prefix_new + prefix  cond_prob:"<<prefix_new_log_cond_prob<<std::endl;              
+              score = prefix_new_log_cond_prob * ext_scorer->alpha;
+              std::cout<<"(prefix_new + prefix_old) * alpha : "<<score<<std::endl;
+              std::cout<<"current log_p : "<<log_p<<std::endl;
+              log_p += score;
+              log_p += ext_scorer->beta;
+              std::cout<<"(prefix_new + prefix_old) * alpha + score + beta : "<<log_p<<std::endl;
+            }
+            
+          } // end of LM scoring
           prefix_new->log_prob_nb_cur =
               log_sum_exp(prefix_new->log_prob_nb_cur, log_p);
         }
+
       }  // end of loop over prefix
     }    // end of loop over vocabulary
 
@@ -154,8 +173,23 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
                        prefixes.begin() + beam_size,
                        prefixes.end(),
                        prefix_compare);
-      for (size_t i = beam_size; i < prefixes.size(); ++i) {
-        prefixes[i]->remove();
+      if(ext_scorer != nullptr){
+        std::cout<<std::endl;
+        std::cout<<"-- PRUNED BEAM (T="<<time_step<<") --"<<std::endl;
+        for (size_t i = beam_size; i < prefixes.size(); ++i) {
+          std::cout<<", "<<prefixes[i]->score;
+          std::cout<<"("<<prefixes[i]->print_prefix_path(vocabulary)<<")";
+          prefixes[i]->remove();
+        }
+        std::cout<<std::endl;
+        std::cout<<std::endl;
+        std::cout<<"-- TOP BEAMS (T="<<time_step<<") --"<<std::endl;
+        for (size_t i = 0; i < beam_size; ++i) {
+          std::cout<<", "<<prefixes[i]->score;
+          std::cout<<"("<<prefixes[i]->print_prefix_path(vocabulary)<<")";
+        }
+        std::cout<<std::endl;
+        std::cout<<std::endl;
       }
     }
   }  // end of loop over time
@@ -165,8 +199,9 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
     for (size_t i = 0; i < beam_size && i < prefixes.size(); ++i) {
       auto prefix = prefixes[i];
       if (!prefix->is_empty() &&
-          ext_scorer->stop_symbol_map_.find(prefix->character) == ext_scorer->stop_symbol_map_.end()) {
+          ext_scorer->tokenization_char_map_.find(prefix->character) == ext_scorer->tokenization_char_map_.end()) {
         float score = 0.0;
+        // std::cout<<"[ctc_beam_search_decode] last word prefix: "<<prefix->print_prefix_path(vocabulary)<<std::endl;
         std::vector<std::string> ngram = ext_scorer->make_ngram(prefix);
         score = ext_scorer->get_log_cond_prob(ngram) * ext_scorer->alpha;
         score += ext_scorer->beta;

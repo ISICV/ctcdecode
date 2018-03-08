@@ -19,13 +19,6 @@ const std::string START_TOKEN = "<s>";
 const std::string UNK_TOKEN = "<unk>";
 const std::string END_TOKEN = "</s>";
 
-// Todo: Remove hardcoded values and use unicode categories
-const std::set<std::string> UXXXX_PUNCTUATIONS = {"u0020", "u002e", "u002c", "u003b", "u0027", "u0022", "u002f", "u0021", "u0028",
-                                                  "u0029", "u005b", "u005d","u003f", "u003c", "u003e", "u002d", "u005f", "u007b",
-                                                  "u007d", "u0024", "u0025", "u0023", "u0026", "u002a"};
-const std::set<std::string> UXXXX_DIGITS = {"u0030", "u0031", "u0032", "u0033", "u0034", "u0035", "u0036", "u0037",
-                                            "u0038", "u0039"};
-
 // Implement a callback to retrive the dictionary of language model.
 class RetriveStrEnumerateVocab : public lm::EnumerateVocab {
 public:
@@ -51,7 +44,9 @@ public:
   Scorer(double alpha,
          double beta,
          const std::string &lm_path,
-         const std::vector<std::string> &vocabulary);
+         const std::vector<std::string> &vocabulary,
+         const std::vector<std::string> &tokenization_vocabulary);
+         
   ~Scorer();
 
   double get_log_cond_prob(const std::vector<std::string> &words);
@@ -84,14 +79,15 @@ public:
   // char list
   std::vector<std::string> char_list_;
   // stop symbols defined for tokenization logic
-  std::unordered_map<int, std::string> stop_symbol_map_;
+  std::unordered_map<int, std::string> tokenization_char_map_;
   // pointer to the dictionary of FST
   void *dictionary;
 
 protected:
   // necessary setup: load language model, set char map, fill FST's dictionary
   void setup(const std::string &lm_path,
-             const std::vector<std::string> &vocab_list);
+             const std::vector<std::string> &char_list,
+             const std::vector<std::string> &tokenization_char_list);
 
   // load language model from given path
   void load_lm(const std::string &lm_path);
@@ -104,7 +100,7 @@ protected:
 
   // set tokenization symbols map
   // maps int positions of punctuation/digits to act as tokenizing points.
-  void set_stop_symbol_map();
+  void set_tokenization_char_map(const std::vector<std::string> &tokenization_char_list);
   
   double get_log_prob(const std::vector<std::string> &words);
 

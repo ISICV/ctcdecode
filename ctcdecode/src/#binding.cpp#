@@ -11,7 +11,15 @@ int uxxxx_string_to_uxxxx_char_vec(const char* labels, std::vector<std::string>&
   // Todo: don't assume the values are comma seperated.
   const std::string labels_str(labels);
   std::string delimiter = ",";
-  new_vocab = split_str(labels_str, delimiter);
+
+  // TMP explicit copy to satiate stephen's curiosity
+
+  // Commenting out old code
+  //new_vocab = split_str(labels_str, delimiter);
+
+  // Now new code
+  std::vector<std::string> result = split_str(labels_str, delimiter);
+  new_vocab = result.copy();
 }
 
 int beam_decode(THFloatTensor *th_probs,

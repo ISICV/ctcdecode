@@ -31,6 +31,7 @@ void* paddle_get_scorer(double alpha,
                         double beta,
                         const char* lm_path,
                         const char* labels,
+                        const char* tokenization_labels,
                         int vocab_size);
 
 int is_character_based(void *scorer);

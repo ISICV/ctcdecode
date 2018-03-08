@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <map>
 #include <unordered_map>
 
 #include "fst/fstlib.h"
@@ -36,7 +37,8 @@ public:
   void iterate_to_vec(std::vector<PathTrie*>& output);
 
   // debugging help
-  void print_prefix_path(std::vector<std::string> char_list);
+  std::string print_prefix_path(std::vector<std::string> char_list);
+
 
   // set dictionary for FST
   void set_dictionary(fst::StdVectorFst* dictionary);

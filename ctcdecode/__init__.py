@@ -3,7 +3,7 @@ import torch
 
 
 class CTCBeamDecoder(object):
-    def __init__(self, labels, model_path=None, alpha=0, beta=0, cutoff_top_n=40, cutoff_prob=1.0, beam_width=100,
+    def __init__(self, labels, tokenization_labels=None, model_path=None, alpha=0, beta=0, cutoff_top_n=40, cutoff_prob=1.0, beam_width=100,
                  num_processes=4, blank_id=0):
         self.cutoff_top_n = cutoff_top_n
         self._beam_width = beam_width
@@ -14,9 +14,9 @@ class CTCBeamDecoder(object):
         self._labels = ','.join(labels).encode('ascii')
         self._num_labels = len(labels)
         self._blank_id = blank_id
-        if model_path:
-            self._scorer = ctc_decode.paddle_get_scorer(alpha, beta, model_path.encode(), self._labels,
-                                                        self._num_labels)
+        if model_path and tokenization_labels:
+            self._tokenization_labels = ','.join(tokenization_labels).encode('ascii')
+            self._scorer = ctc_decode.paddle_get_scorer(alpha, beta, model_path.encode(), self._labels, self._tokenization_labels, self._num_labels)
         self._cutoff_prob = cutoff_prob
 
     def decode(self, probs, seq_lens=None):

@@ -4,6 +4,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <map>
 
 #include "scorer.h"
 #include "output.h"

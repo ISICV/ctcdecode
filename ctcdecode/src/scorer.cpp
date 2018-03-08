@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <vector>
+#include <map>
 #include <unordered_map>
 
 #include "lm/config.hh"
@@ -18,7 +19,8 @@ using namespace lm::ngram;
 Scorer::Scorer(double alpha,
                double beta,
                const std::string& lm_path,
-               const std::vector<std::string>& vocab_list) {
+               const std::vector<std::string>& char_list,
+               const std::vector<std::string>& tokenization_char_list) {
   this->alpha = alpha;
   this->beta = beta;
 
@@ -29,7 +31,7 @@ Scorer::Scorer(double alpha,
   max_order_ = 0;
   dict_size_ = 0;
   
-  setup(lm_path, vocab_list);
+  setup(lm_path, char_list, tokenization_char_list);
 }
 
 Scorer::~Scorer() {
@@ -42,13 +44,14 @@ Scorer::~Scorer() {
 }
 
 void Scorer::setup(const std::string& lm_path,
-                   const std::vector<std::string>& vocab_list) {
+                   const std::vector<std::string>& char_list,
+                   const std::vector<std::string>& tokenization_char_list) {
   // load language model
   load_lm(lm_path);
   // set char map for scorer
-  set_char_map(vocab_list);
+  set_char_map(char_list);
   // set tokenization symbol set based on char_map
-  set_stop_symbol_map();
+  set_tokenization_char_map(tokenization_char_list);
   // fill the dictionary for FST
   if (!is_character_based()) {
     fill_dictionary();
@@ -85,11 +88,11 @@ double Scorer::get_log_cond_prob(const std::vector<std::string>& words) {
     lm::WordIndex word_index = model->BaseVocabulary().Index(words[i]);
     // encounter OOV
     if (word_index == 0) {
-      std::cout<<"[get_log_cond_prob] oov["<<words[i]<<"] score: "<<OOV_SCORE<<std::endl;
+      // std::cout<<"[get_log_cond_prob] oov["<<words[i]<<"] : "<<OOV_SCORE<<std::endl;
       return OOV_SCORE;
     }
     else{
-      std::cout<<"[get_log_cond_prob] score["<<words[i]<<"] : "<<model->BaseScore(&state, word_index, &out_state)<<std::endl;
+      // std::cout<<"[get_log_cond_prob] score["<<words[i]<<"] : "<<model->BaseScore(&state, word_index, &out_state)<<std::endl;
     }
     cond_prob = model->BaseScore(&state, word_index, &out_state);
     tmp_state = state;
@@ -163,7 +166,7 @@ std::vector<std::string> Scorer::split_labels(const std::vector<int>& labels) {
   std::string current_string;
   bool start_of_new_word = true;
   for(auto label: labels){
-    if(stop_symbol_map_.find(label) != stop_symbol_map_.end()){
+    if(tokenization_char_map_.find(label) != tokenization_char_map_.end()){
       if(current_string.length() > 0) {
         words.push_back(current_string);
       }
@@ -182,10 +185,6 @@ std::vector<std::string> Scorer::split_labels(const std::vector<int>& labels) {
   if(current_string.length() > 0) {
     words.push_back(current_string);
   }
-  // std::cout<<"[split_lables] words:";
-  //   for(auto word : words)
-  //     std::cout<<" "<<word;
-  //   std::cout<<std::endl;
   return words;
 }
 
@@ -195,40 +194,121 @@ void Scorer::set_char_map(const std::vector<std::string>& char_list) {
   for (size_t i = 0; i < char_list_.size(); i++) {
       char_map_[char_list_[i]] = i;
   }
-  std::cout<<std::endl<<std::endl;
 }
 
-void Scorer::set_stop_symbol_map(){
-  for(auto const& character: char_map_){
-    std::string uxxxx_char = character.first;
-    int pos = character.second;
-    if ( UXXXX_PUNCTUATIONS.find(uxxxx_char) != UXXXX_PUNCTUATIONS.end() ||
-         UXXXX_DIGITS.find(uxxxx_char) != UXXXX_DIGITS.end() ){
-      stop_symbol_map_[pos] = uxxxx_char;
+void Scorer::set_tokenization_char_map(const std::vector<std::string>& tokenization_char_list){
+  for(auto character: tokenization_char_list){
+    std::string uxxxx_char = character;
+    if (char_map_.find(uxxxx_char) != char_map_.end()){
+       int pos = char_map_[uxxxx_char];
+       tokenization_char_map_[pos] = uxxxx_char;
+    }
+    else{
+      std::cout<<"tokenization char:"<<uxxxx_char<<" not defined in vocabulary"<<std::endl;
+      std::exit(1);
     }
   }
-  std::cout<<std::endl<<std::endl;
 }
 
 std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
   std::vector<std::string> ngram;
   PathTrie* current_node = prefix;
   PathTrie* new_node = nullptr;
-  // std::cout<<"[make_ngram] start"<<std::endl;
+  
+  std::map<std::string, std::string> utf_2_eng;
+  utf_2_eng["u0020"] = "<spc>";
+  utf_2_eng["u0021"] = "!";
+  utf_2_eng["u0022"] = "\"";
+  utf_2_eng["u0027"] = "'";
+  utf_2_eng["u0028"] = "(";
+  utf_2_eng["u0029"] = ")";
+  utf_2_eng["u002a"] = "*";
+  utf_2_eng["u002c"] = ",";
+  utf_2_eng["u002d"] = "-";
+  utf_2_eng["u002e"] = ".";
+  utf_2_eng["u0030"] = "0";
+  utf_2_eng["u0031"] = "1";
+  utf_2_eng["u0032"] = "2";
+  utf_2_eng["u0033"] = "3";
+  utf_2_eng["u0034"] = "4";
+  utf_2_eng["u0035"] = "5";
+  utf_2_eng["u0036"] = "6";
+  utf_2_eng["u0037"] = "7";
+  utf_2_eng["u0038"] = "8";
+  utf_2_eng["u0039"] = "9";
+  utf_2_eng["u003a"] = ":";
+  utf_2_eng["u003b"] = ";";
+  utf_2_eng["u003f"] = "?";
+  utf_2_eng["u0041"] = "A";
+  utf_2_eng["u0042"] = "B";
+  utf_2_eng["u0043"] = "C";
+  utf_2_eng["u0044"] = "D";
+  utf_2_eng["u0045"] = "E";
+  utf_2_eng["u0046"] = "F";
+  utf_2_eng["u0047"] = "G";
+  utf_2_eng["u0048"] = "H";
+  utf_2_eng["u0049"] = "I";
+  utf_2_eng["u004a"] = "J";
+  utf_2_eng["u004b"] = "K";
+  utf_2_eng["u004c"] = "L";
+  utf_2_eng["u004d"] = "M";
+  utf_2_eng["u004e"] = "N";
+  utf_2_eng["u004f"] = "O";
+  utf_2_eng["u0050"] = "P";
+  utf_2_eng["u0051"] = "Q";
+  utf_2_eng["u0052"] = "R";
+  utf_2_eng["u0053"] = "S";
+  utf_2_eng["u0054"] = "T";
+  utf_2_eng["u0055"] = "U";
+  utf_2_eng["u0056"] = "V";
+  utf_2_eng["u0057"] = "W";
+  utf_2_eng["u0058"] = "X";
+  utf_2_eng["u0059"] = "Y";
+  utf_2_eng["u005a"] = "Z";
+  utf_2_eng["u005c"] = "\\";
+  utf_2_eng["u0061"] = "a";
+  utf_2_eng["u0062"] = "b";
+  utf_2_eng["u0063"] = "c";
+  utf_2_eng["u0064"] = "d";
+  utf_2_eng["u0065"] = "e";
+  utf_2_eng["u0066"] = "f";
+  utf_2_eng["u0067"] = "g";
+  utf_2_eng["u0068"] = "h";
+  utf_2_eng["u0069"] = "i";
+  utf_2_eng["u006a"] = "j";
+  utf_2_eng["u006b"] = "k";
+  utf_2_eng["u006c"] = "l";
+  utf_2_eng["u006d"] = "m";
+  utf_2_eng["u006e"] = "n";
+  utf_2_eng["u006f"] = "o";
+  utf_2_eng["u0070"] = "p";
+  utf_2_eng["u0071"] = "q";
+  utf_2_eng["u0072"] = "r";
+  utf_2_eng["u0073"] = "s";
+  utf_2_eng["u0074"] = "t";
+  utf_2_eng["u0075"] = "u";
+  utf_2_eng["u0076"] = "v";
+  utf_2_eng["u0077"] = "w";
+  utf_2_eng["u0078"] = "x";
+  utf_2_eng["u0079"] = "y";
+  utf_2_eng["u007a"] = "z";
+  utf_2_eng["u007e"] = "~";
+  utf_2_eng["u2013"] = "–";
+  utf_2_eng["u201c"] = "“";
+  
   for (int order = 0; order < max_order_; order++) {
     std::vector<int> prefix_vec;
     std::vector<int> prefix_steps;
 
     if (is_character_based_) {
-      std::cout<<"undefined behaviour when using stop_symbol_map_ with character model."<<std::endl;
+      std::cout<<"undefined behaviour when using tokenization_char_map_ with character model."<<std::endl;
       std::exit(1);
-      new_node = current_node->get_path_vec(prefix_vec, prefix_steps, stop_symbol_map_, 1);
+      new_node = current_node->get_path_vec(prefix_vec, prefix_steps, tokenization_char_map_, 1);
       current_node = new_node;
     } else {
-      std::cout<<"[make_ngram] current_node->character:"<<current_node->character<<std::endl;
-      std::vector<int> vec_char {current_node->character};
-      std::cout<<"[make_ngram] vec2str(current_node->character):"<<vec2str(vec_char)<<std::endl;
-      if(stop_symbol_map_.find(current_node->character) != stop_symbol_map_.end()){
+      // std::vector<int> vec_char {current_node->character};
+      // std::cout<<"[make_ngram] tokenization char found: "<<utf_2_eng[vec2str(vec_char)]<<std::endl;
+      if(tokenization_char_map_.find(current_node->character) != tokenization_char_map_.end()){
         // logic to push back stop_symbols into the ngram as seperate tokens
         prefix_vec.push_back(current_node->character);
         prefix_steps.push_back(current_node->timestep);
@@ -236,14 +316,13 @@ std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
       }
       else{
         // read till stop symbol.
-        new_node = current_node->get_path_vec(prefix_vec, prefix_steps, stop_symbol_map_);
+        new_node = current_node->get_path_vec(prefix_vec, prefix_steps, tokenization_char_map_);
       }
       current_node = new_node;
     }
 
     // reconstruct word
     std::string word = vec2str(prefix_vec);
-    std::cout<<"[make_ngram] word found :"<<word<<std::endl;
     if (word.length() > 0)
       ngram.push_back(word);
 
@@ -257,11 +336,29 @@ std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
     }
   }
   std::reverse(ngram.begin(), ngram.end());
-  std::cout<<"[make_ngram] list:";
-  for(auto gram: ngram)
-    std::cout<<" "<<gram;
-  std::cout<<std::endl;
-  // std::cout<<"[make_ngram] stop"<<std::endl<<std::endl;
+
+  // ----------printing logic start-------------
+  // int print_flag = 0;
+  // for(auto gram : ngram)
+  //   if(gram != START_TOKEN)
+  //     print_flag += 1;
+  // if(print_flag > 0){
+  //   std::cout<<"[make_ngram] uxxxx list:";
+  //   for(auto gram: ngram)
+  //     std::cout<<" , "<<gram;
+  //   std::cout<<std::endl;
+  //   std::cout<<"[make_ngram] utf8 list:";
+  //   for(auto gram: ngram){
+  //     std::vector<std::string> uxxxx_chars;
+  //     uxxxx_chars = split_str(gram, "_");
+  //     for(auto uxxxx_char: uxxxx_chars)
+  //       std::cout<<utf_2_eng[uxxxx_char];
+  //     std::cout<<" , ";
+  //   }
+  //   std::cout<<std::endl;
+  // }
+  // ----------printing logic end--------------
+
   return ngram;
 }
 
