@@ -88,11 +88,7 @@ double Scorer::get_log_cond_prob(const std::vector<std::string>& words) {
     lm::WordIndex word_index = model->BaseVocabulary().Index(words[i]);
     // encounter OOV
     if (word_index == 0) {
-      // std::cout<<"[get_log_cond_prob] oov["<<words[i]<<"] : "<<OOV_SCORE<<std::endl;
       return OOV_SCORE;
-    }
-    else{
-      // std::cout<<"[get_log_cond_prob] score["<<words[i]<<"] : "<<model->BaseScore(&state, word_index, &out_state)<<std::endl;
     }
     cond_prob = model->BaseScore(&state, word_index, &out_state);
     tmp_state = state;
@@ -100,10 +96,6 @@ double Scorer::get_log_cond_prob(const std::vector<std::string>& words) {
     out_state = tmp_state;
   }
   // return loge prob
-  std::cout<<"[get_log_cond_prob] words:[";
-  for(auto word : words)
-    std::cout<<" "<<word;
-  std::cout<<" ] = "<<cond_prob/NUM_FLT_LOGE<<std::endl;
   return cond_prob/NUM_FLT_LOGE;
 }
 
@@ -158,7 +150,7 @@ std::vector<std::string> Scorer::split_labels(const std::vector<int>& labels) {
   if (labels.empty()) return {};
   
   if (is_character_based_) {
-    std::cout<<"splitting char model not defined."<<std::endl;
+    std::cerr<<"splitting char model not defined."<<std::endl;
     std::exit(1);
   }
   
@@ -204,7 +196,7 @@ void Scorer::set_tokenization_char_map(const std::vector<std::string>& tokenizat
        tokenization_char_map_[pos] = uxxxx_char;
     }
     else{
-      std::cout<<"tokenization char:"<<uxxxx_char<<" not defined in vocabulary"<<std::endl;
+      std::cerr<<"tokenization char:"<<uxxxx_char<<" not defined in vocabulary"<<std::endl;
       std::exit(1);
     }
   }
@@ -301,13 +293,11 @@ std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
     std::vector<int> prefix_steps;
 
     if (is_character_based_) {
-      std::cout<<"undefined behaviour when using tokenization_char_map_ with character model."<<std::endl;
+      std::cerr<<"undefined behaviour when using tokenization_char_map_ with character model."<<std::endl;
       std::exit(1);
       new_node = current_node->get_path_vec(prefix_vec, prefix_steps, tokenization_char_map_, 1);
       current_node = new_node;
     } else {
-      // std::vector<int> vec_char {current_node->character};
-      // std::cout<<"[make_ngram] tokenization char found: "<<utf_2_eng[vec2str(vec_char)]<<std::endl;
       if(tokenization_char_map_.find(current_node->character) != tokenization_char_map_.end()){
         // logic to push back stop_symbols into the ngram as seperate tokens
         prefix_vec.push_back(current_node->character);
@@ -336,29 +326,6 @@ std::vector<std::string> Scorer::make_ngram(PathTrie* prefix) {
     }
   }
   std::reverse(ngram.begin(), ngram.end());
-
-  // ----------printing logic start-------------
-  // int print_flag = 0;
-  // for(auto gram : ngram)
-  //   if(gram != START_TOKEN)
-  //     print_flag += 1;
-  // if(print_flag > 0){
-  //   std::cout<<"[make_ngram] uxxxx list:";
-  //   for(auto gram: ngram)
-  //     std::cout<<" , "<<gram;
-  //   std::cout<<std::endl;
-  //   std::cout<<"[make_ngram] utf8 list:";
-  //   for(auto gram: ngram){
-  //     std::vector<std::string> uxxxx_chars;
-  //     uxxxx_chars = split_str(gram, "_");
-  //     for(auto uxxxx_char: uxxxx_chars)
-  //       std::cout<<utf_2_eng[uxxxx_char];
-  //     std::cout<<" , ";
-  //   }
-  //   std::cout<<std::endl;
-  // }
-  // ----------printing logic end--------------
-
   return ngram;
 }
 

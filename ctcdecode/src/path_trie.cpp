@@ -39,7 +39,7 @@ PathTrie::~PathTrie() {
   }
 }
 
-PathTrie* PathTrie::get_path_trie(int new_char, int new_timestep, bool reset) {
+PathTrie* PathTrie::get_path_trie(int new_char, int new_timestep, bool ignore_tokenization_symbol, bool reset) {
   auto child = children_.begin();
   for (child = children_.begin(); child != children_.end(); ++child) {
     if (child->first == new_char) {
@@ -57,6 +57,22 @@ PathTrie* PathTrie::get_path_trie(int new_char, int new_timestep, bool reset) {
     return (child->second);
   } else {
     if (has_dictionary_) {
+      // note to self:
+      // when using tokenization symbols we need to make sure that matching is not done.
+      // Also, if it is a tokenization symbol then reset the dictionary to start for next set of matching.
+      if (ignore_tokenization_symbol){
+        PathTrie* new_path = new PathTrie;
+        // reset dictionary state
+        dictionary_state_ = dictionary_->Start();
+        new_path->character = new_char;
+        new_path->timestep = new_timestep;
+        new_path->parent = this;
+        new_path->dictionary_ = dictionary_;
+        new_path->has_dictionary_ = true;
+        new_path->matcher_ = matcher_;
+        children_.push_back(std::make_pair(new_char, new_path));
+        return new_path;
+      }
       matcher_->SetState(dictionary_state_);
       bool found = matcher_->Find(new_char);
       if (!found) {
