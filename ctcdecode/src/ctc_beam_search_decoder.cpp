@@ -127,7 +127,6 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
               float score;
               float prefix_new_log_cond_prob;
               std::vector<std::string> prefix_new_ngram;
-              // std::cout<<"\nprefix_new(T:"<<time_step<<"): "<<prefix_new->print_prefix_path(vocabulary)<<std::endl;
               prefix_new_ngram = ext_scorer->make_ngram(prefix_new);
               prefix_new_log_cond_prob = ext_scorer->get_log_cond_prob(prefix_new_ngram);
 
@@ -136,18 +135,11 @@ std::vector<std::pair<double, Output>> ctc_beam_search_decoder(
                 std::vector<std::string> prefix_ngram;
                 prefix_ngram = ext_scorer->make_ngram(prefix);
                 prefix_log_cond_prob = ext_scorer->get_log_cond_prob(prefix_ngram);
-                // std::cout<<"\tprefix_new  cond_prob:"<<prefix_new_log_cond_prob<<std::endl;
-                // std::cout<<"\tprefix cond_prob:"<<prefix_log_cond_prob<<std::endl;
                 prefix_new_log_cond_prob = log_sum_exp(prefix_new_log_cond_prob, prefix_log_cond_prob);
               }
-              
-              // std::cout<<"\tprefix_new + prefix  cond_prob:"<<prefix_new_log_cond_prob<<std::endl;
               score = prefix_new_log_cond_prob * ext_scorer->alpha;
-              // std::cout<<"(prefix_new + prefix_old) * alpha : "<<score<<std::endl;
-              // std::cout<<"\t(T:"<<time_step<<") current log_p : "<<log_p<<std::endl;
               log_p += score;
               log_p += ext_scorer->beta;
-              // std::cout<<"\t(T:"<<time_step<<") (prefix_new + prefix_old) * alpha + score + beta : "<<log_p<<std::endl;
             }
           }   // end of LM scoring
           

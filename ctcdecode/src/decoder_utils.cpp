@@ -126,7 +126,6 @@ bool add_word_to_dictionary(
     if (int_c != char_map.end()) {
       int_word.push_back(int_c->second);
     } else {
-      // std::cout<<"[add_word_to_dictionary] failed."<<std::endl;
       return false;  // return without adding
     }
   }
