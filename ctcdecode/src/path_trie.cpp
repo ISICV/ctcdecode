@@ -63,7 +63,7 @@ PathTrie* PathTrie::get_path_trie(int new_char, int new_timestep, bool ignore_to
       if (ignore_tokenization_symbol){
         PathTrie* new_path = new PathTrie;
         // reset dictionary state
-        dictionary_state_ = dictionary_->Start();
+        new_path->dictionary_state_ = dictionary_->Start();
         new_path->character = new_char;
         new_path->timestep = new_timestep;
         new_path->parent = this;
