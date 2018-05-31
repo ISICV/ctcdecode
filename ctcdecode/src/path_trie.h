@@ -22,7 +22,7 @@ public:
   ~PathTrie();
 
   // get new prefix after appending new char
-  PathTrie* get_path_trie(int new_char, int new_timestep, bool ignore_tokenization_symbol, bool reset = true);
+  PathTrie* get_path_trie(int new_char, int new_timestep, bool ignore_tokenization_symbol, bool reset = false);
 
   // get the prefix in index from root to current node
   PathTrie* get_path_vec(std::vector<int>& output, std::vector<int>& timesteps);
